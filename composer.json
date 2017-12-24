@@ -1,0 +1,12 @@
+{
+    "name"  : "workerman/workerman-chat",
+    "type"  : "project",
+    "keywords": ["chat"],
+    "homepage": "http://www.workerman.net",
+    "license" : "MIT",
+    "require": {
+        "workerman/gateway-worker" : ">=3.0.0",
+        "vlucas/phpdotenv": "^2.4",
+        "workerman/mysql": "^1.0"
+    }
+}
