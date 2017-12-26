@@ -31,11 +31,11 @@
                 </div>
             </form>
             <div>
-                &nbsp;&nbsp;&nbsp;&nbsp;<b>房间列表:</b>（当前在&nbsp;房间<?php echo isset($_GET['room_id']) && intval($_GET['room_id']) > 0 ? intval($_GET['room_id']) : 1; ?>
-                ）<br>
-                &nbsp;&nbsp;&nbsp;&nbsp;<a href="/?room_id=1">房间1</a>&nbsp;&nbsp;&nbsp;&nbsp;<a
-                    href="/?room_id=2">房间2</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="/?room_id=3">房间3</a>&nbsp;&nbsp;&nbsp;&nbsp;<a
-                    href="/?room_id=4">房间4</a>
+                &nbsp;&nbsp;&nbsp;&nbsp;<b>房间列表:</b>（当前在&nbsp;房间<?php echo isset($_GET['room_id']) && intval($_GET['room_id']) > 0 ? intval($_GET['room_id']) : 1; ?>）<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;<a href="/?room_id=1">房间1</a>
+                &nbsp;&nbsp;&nbsp;&nbsp;<a href="/?room_id=2">房间2</a>
+                &nbsp;&nbsp;&nbsp;&nbsp;<a href="/?room_id=3">房间3</a>
+                &nbsp;&nbsp;&nbsp;&nbsp;<a href="/?room_id=4">房间4</a>
                 <br><br>
             </div>
             <p class="cp">PHP多进程+Websocket(HTML5/Flash)+PHP Socket实时推送技术&nbsp;&nbsp;&nbsp;&nbsp;Powered by
@@ -53,7 +53,17 @@
     WEB_SOCKET_SWF_LOCATION = "/swf/WebSocketMain.swf";
     // 开启flash的websocket debug
     WEB_SOCKET_DEBUG = true;
-    var ws, name, client_list = {};
+    var ws, name, client_list = {}, select_client_id = 'all';
+
+    $(function () {
+        $("#client_list").change(function () {
+            select_client_id = $("#client_list option:selected").attr("value");
+        });
+        $('.face').click(function (event) {
+            $(this).sinaEmotion();
+            event.stopPropagation();
+        });
+    });
 
     // 连接服务端
     function connect() {
@@ -133,9 +143,12 @@
     // 提交对话
     function onSubmit() {
         var input = document.getElementById("textarea");
-        var to_client_id = $("#client_list option:selected").attr("value");
-        var to_client_name = $("#client_list option:selected").text();
-        ws.send('{"type":"say","to_client_id":"' + to_client_id + '","to_client_name":"' + to_client_name + '","content":"' + input.value.replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r') + '"}');
+        ws.send(JSON.stringify({
+            type: 'say',
+            to_client_id: $("#client_list option:selected").attr("value"),
+            to_client_name: $("#client_list option:selected").text(),
+            content: input.value.replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r')
+        }));
         input.value = "";
         input.focus();
     }
@@ -143,16 +156,16 @@
     // 刷新用户列表框
     function flushClientList() {
         var userlist_window = $("#userlist");
-        var client_list_slelect = $("#client_list");
+        var client_list_select = $("#client_list");
         userlist_window.empty();
-        client_list_slelect.empty();
+        client_list_select.empty();
         userlist_window.append('<h4>在线用户</h4><ul>');
-        client_list_slelect.append('<option value="all" id="cli_all">所有人</option>');
+        client_list_select.append('<option value="all" id="cli_all">所有人</option>');
         for (var p in client_list) {
             userlist_window.append('<li id="' + p + '">' + client_list[p] + '</li>');
-            client_list_slelect.append('<option value="' + p + '">' + client_list[p] + '</option>');
+            client_list_select.append('<option value="' + p + '">' + client_list[p] + '</option>');
         }
-        $("#client_list").val(select_client_id);
+        client_list_select.val(select_client_id);
         userlist_window.append('</ul>');
     }
 
@@ -174,20 +187,12 @@
             }
         );
 
-        $("#dialog").append('<div class="speech_item"><img src="http://lorempixel.com/38/38/?' + from_client_id + '" class="user_icon" /> ' + from_client_name + ' <br> ' + time + '<div style="clear:both;"></div><p class="triangle-isosceles top">' + content + '</p> </div>').parseEmotion();
+        var info = '<div class="speech_item">' +
+            '<img src="http://lorempixel.com/38/38/?' + from_client_id + '" class="user_icon" /> ' + from_client_name + ' <br> ' + time + '<div style="clear:both;"></div>' +
+            '<p class="triangle-isosceles top">' + content + '</p> ' +
+            '</div>';
+        $("#dialog").append(info).parseEmotion();
     }
-
-    $(function () {
-        select_client_id = 'all';
-        $("#client_list").change(function () {
-            select_client_id = $("#client_list option:selected").attr("value");
-        });
-        $('.face').click(function (event) {
-            $(this).sinaEmotion();
-            event.stopPropagation();
-        });
-    });
-
 </script>
 </body>
 </html>
