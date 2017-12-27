@@ -106,17 +106,21 @@ class Events
                         'msg' => '现在还没有客服在线'
                     ];
                     Gateway::sendToCurrentClient(json_encode($new_msg));
-                    return;
+                    $service_id = '';
+                    $service_name = '';
+                } else {
+                    // 目前默认第一个客服为其服务
+                    $service = reset($service_list);
+                    $service_name = $service['client_name'];
+                    $service_id = key($service_list);
                 }
-
-                // 目前默认第一个客服为其服务
-                $service = reset($service_list);
-                $client_id = key($service_list);
 
                 $new_msg = [
                     'type' => 'client_login',
                     'client_id' => $client_id,
-                    'client_name' => $service['client_name'],
+                    'client_name' => $client_name,
+                    'service_id' => $service_id,
+                    'service_name' => $service_name,
                     'time' => date('Y-m-d H:i:s'),
                 ];
                 Gateway::sendToCurrentClient(json_encode($new_msg));
@@ -135,9 +139,6 @@ class Events
                     'time' => date('Y-m-d H:i:s'),
                 ];
                 Gateway::sendToClient($msg['to_client_id'], json_encode($new_msg));
-
-                //$new_msg['content'] = nl2br(htmlspecialchars($msg['content']));
-                //Gateway::sendToCurrentClient(json_encode($new_msg));
 
                 //self::logChat($client_name, $msg['content']);
                 return;

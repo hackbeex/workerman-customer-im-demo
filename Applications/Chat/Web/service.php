@@ -28,12 +28,12 @@
             </div>
             <form onsubmit="onSubmit(); return false;">
                 <select style="margin-bottom:8px" id="client_list">
-                    <option value="all">所有人</option>
+                    <option value="none">请选择用户</option>
                 </select>
                 <textarea class="textarea thumbnail" id="textarea"></textarea>
                 <div class="say-btn">
                     <input type="button" class="btn btn-default face pull-left" value="表情"/>
-                    <input type="submit" class="btn btn-default" value="发表"/>
+                    <input type="submit" class="btn btn-default" value="发送"/>
                 </div>
             </form>
             <p class="cp">PHP多进程+Websocket(HTML5/Flash)+PHP Socket实时推送技术&nbsp;&nbsp;&nbsp;&nbsp;Powered by
@@ -82,8 +82,7 @@
         }
         // 登录
         var loginData = JSON.stringify({
-            type: 'login',
-            is_service: 1,
+            type: 'service_login',
             client_name: name.replace(/"/g, '\\"')
         });
         console.log("websocket握手成功，发送登录数据:" + loginData);

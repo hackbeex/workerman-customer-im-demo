@@ -6,45 +6,36 @@
     <link href="/css/jquery-sinaEmotion-2.1.0.min.css" rel="stylesheet">
     <link href="/css/style.css" rel="stylesheet">
 
-    <script type="text/javascript" src="/js/swfobject.js"></script>
-    <script type="text/javascript" src="/js/web_socket.js"></script>
+    <script type="text/javascript" src="/js/layer.js"></script>
     <script type="text/javascript" src="/js/jquery.min.js"></script>
     <script type="text/javascript" src="/js/jquery-sinaEmotion-2.1.0.min.js"></script>
+    <script type="text/javascript" src="/js/swfobject.js"></script>
+    <script type="text/javascript" src="/js/web_socket.js"></script>
 </head>
 <body onload="connect();">
 <div class="container">
     <div class="row clearfix">
         <div class="col-md-1 column">
         </div>
-        <div class="col-md-6 column">
-            <div class="thumbnail">
-                <div class="caption" id="dialog"></div>
-            </div>
-            <form onsubmit="onSubmit(); return false;">
-                <select style="margin-bottom:8px" id="client_list">
-                    <option value="all">所有人</option>
-                </select>
-                <textarea class="textarea thumbnail" id="textarea"></textarea>
-                <div class="say-btn">
-                    <input type="button" class="btn btn-default face pull-left" value="表情"/>
-                    <input type="submit" class="btn btn-default" value="发表"/>
-                </div>
-            </form>
-            <div>
-                &nbsp;&nbsp;&nbsp;&nbsp;<b>房间列表:</b>（当前在&nbsp;房间<?php echo isset($_GET['room_id']) && intval($_GET['room_id']) > 0 ? intval($_GET['room_id']) : 1; ?>）<br>
-                &nbsp;&nbsp;&nbsp;&nbsp;<a href="/?room_id=1">房间1</a>
-                &nbsp;&nbsp;&nbsp;&nbsp;<a href="/?room_id=2">房间2</a>
-                &nbsp;&nbsp;&nbsp;&nbsp;<a href="/?room_id=3">房间3</a>
-                &nbsp;&nbsp;&nbsp;&nbsp;<a href="/?room_id=4">房间4</a>
-                <br><br>
-            </div>
-            <p class="cp">PHP多进程+Websocket(HTML5/Flash)+PHP Socket实时推送技术&nbsp;&nbsp;&nbsp;&nbsp;Powered by
-                <a href="http://www.workerman.net/workerman-chat" target="_blank">workerman-chat</a></p>
-        </div>
         <div class="col-md-3 column">
             <div class="thumbnail">
                 <div class="caption" id="userlist"></div>
             </div>
+        </div>
+        <div class="col-md-6 column">
+            <div id="current_client"></div>
+            <div class="thumbnail">
+                <div class="caption" id="dialog"></div>
+            </div>
+            <form onsubmit="onSubmit(); return false;">
+                <textarea class="textarea thumbnail" id="textarea"></textarea>
+                <div class="say-btn">
+                    <input type="button" class="btn btn-default face pull-left" value="表情"/>
+                    <input type="submit" class="btn btn-default" value="发送"/>
+                </div>
+            </form>
+            <p class="cp">PHP多进程+Websocket(HTML5/Flash)+PHP Socket实时推送技术&nbsp;&nbsp;&nbsp;&nbsp;Powered by
+                <a href="http://www.workerman.net/workerman-chat" target="_blank">workerman-chat</a></p>
         </div>
     </div>
 </div>
@@ -53,12 +44,30 @@
     WEB_SOCKET_SWF_LOCATION = "/swf/WebSocketMain.swf";
     // 开启flash的websocket debug
     WEB_SOCKET_DEBUG = true;
-    var ws, name, client_list = {}, select_client_id = 'all';
+    var ws, name, service_id, service_name, client_id, client_name;
 
     $(function () {
-        $("#client_list").change(function () {
-            select_client_id = $("#client_list option:selected").attr("value");
-        });
+        Date.prototype.format = function(fmt) {
+            var o = {
+                "M+" : this.getMonth()+1,                 //月份
+                "d+" : this.getDate(),                    //日
+                "h+" : this.getHours(),                   //小时
+                "m+" : this.getMinutes(),                 //分
+                "s+" : this.getSeconds(),                 //秒
+                "q+" : Math.floor((this.getMonth()+3)/3), //季度
+                "S"  : this.getMilliseconds()             //毫秒
+            };
+            if(/(y+)/.test(fmt)) {
+                fmt=fmt.replace(RegExp.$1, (this.getFullYear()+"").substr(4 - RegExp.$1.length));
+            }
+            for(var k in o) {
+                if(new RegExp("("+ k +")").test(fmt)){
+                    fmt = fmt.replace(RegExp.$1, (RegExp.$1.length==1) ? (o[k]) : (("00"+ o[k]).substr((""+ o[k]).length)));
+                }
+            }
+            return fmt;
+        };
+
         $('.face').click(function (event) {
             $(this).sinaEmotion();
             event.stopPropagation();
@@ -89,9 +98,8 @@
         }
         // 登录
         var loginData = JSON.stringify({
-            type: 'login',
-            client_name: name.replace(/"/g, '\\"'),
-            room_id: "<?php echo isset($_GET['room_id']) ? $_GET['room_id'] : 1?>"
+            type: 'client_login',
+            client_name: name.replace(/"/g, '\\"')
         });
         console.log("websocket握手成功，发送登录数据:" + loginData);
         ws.send(loginData);
@@ -101,34 +109,41 @@
     function onMessage(e) {
         console.log(e.data);
         var data = JSON.parse(e.data);
-        switch (data['type']) {
-            // 服务端ping客户端
+        switch (data.type) {
             case 'ping':
                 ws.send('{"type":"pong"}');
                 break;
-            // 登录 更新用户列表
-            case 'login':
-                //{"type":"login","client_id":xxx,"client_name":"xxx","client_list":"[...]","time":"xxx"}
-                say(data['client_id'], data['client_name'], data['client_name'] + ' 加入了聊天室', data['time']);
-                if (data['client_list']) {
-                    client_list = data['client_list'];
+            case 'client_login':
+                client_id = data['client_id'];
+                client_name = data['client_name'];
+                service_id = data['service_id'];
+                service_name = data['service_name'];
+                if (service_id) {
+                    layer.msg('客服：'+service_name+' 为你服务');
                 } else {
-                    client_list[data['client_id']] = data['client_name'];
+                    layer.msg('尚无客服在线');
                 }
-                flushClientList();
-                console.log(data['client_name'] + "登录成功");
+                console.log(client_name + "登录成功");
+                break;
+            case 'service_login':
+                service_id = data['client_id'];
+                service_name = data['client_name'];
+                layer.msg('客服' + data.client_name + '上线');
+                $('#current_client').text(data.client_name);
+                console.log(data['client_name'] + "：客服上线");
                 break;
             // 发言
             case 'say':
-                //{"type":"say","from_client_id":xxx,"to_client_id":"all/client_id","content":"xxx","time":"xxx"}
                 say(data['from_client_id'], data['from_client_name'], data['content'], data['time']);
                 break;
             // 用户退出 更新用户列表
             case 'logout':
-                //{"type":"logout","client_id":xxx,"time":"xxx"}
                 say(data['from_client_id'], data['from_client_name'], data['from_client_name'] + ' 退出了', data['time']);
                 delete client_list[data['from_client_id']];
-                flushClientList();
+                break;
+            case 'error':
+                layer.msg(data.msg);
+                break;
         }
     }
 
@@ -142,35 +157,27 @@
 
     // 提交对话
     function onSubmit() {
+        if (!service_id) {
+            layer.msg('客服未上线');
+            return;
+        }
+
         var input = document.getElementById("textarea");
+        var content = input.value.replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
         ws.send(JSON.stringify({
             type: 'say',
-            to_client_id: $("#client_list option:selected").attr("value"),
-            to_client_name: $("#client_list option:selected").text(),
-            content: input.value.replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r')
+            to_client_id: service_id,
+            to_client_name: service_name,
+            content: content
         }));
+
+        var now = (new Date).format('yyyy-MM-dd hh:mm:ss');
+        say(client_id, client_name, content, now);
         input.value = "";
         input.focus();
     }
 
-    // 刷新用户列表框
-    function flushClientList() {
-        var userlist_window = $("#userlist");
-        var client_list_select = $("#client_list");
-        userlist_window.empty();
-        client_list_select.empty();
-        userlist_window.append('<h4>在线用户</h4><ul>');
-        client_list_select.append('<option value="all" id="cli_all">所有人</option>');
-        for (var p in client_list) {
-            userlist_window.append('<li id="' + p + '">' + client_list[p] + '</li>');
-            client_list_select.append('<option value="' + p + '">' + client_list[p] + '</option>');
-        }
-        client_list_select.val(select_client_id);
-        userlist_window.append('</ul>');
-    }
-
-    // 发言
-    function say(from_client_id, from_client_name, content, time) {
+    function formatContent(content) {
         //解析新浪微博图片
         content = content.replace(/(http|https):\/\/[\w]+.sinaimg.cn[\S]+(jpg|png|gif)/gi, function (img) {
                 return "<a target='_blank' href='" + img + "'>" + "<img src='" + img + "'>" + "</a>";
@@ -186,6 +193,13 @@
                 }
             }
         );
+
+        return content;
+    }
+
+    // 发言
+    function say(from_client_id, from_client_name, content, time) {
+        content = formatContent(content);
 
         var info = '<div class="speech_item">' +
             '<img src="http://lorempixel.com/38/38/?' + from_client_id + '" class="user_icon" /> ' + from_client_name + ' <br> ' + time + '<div style="clear:both;"></div>' +
