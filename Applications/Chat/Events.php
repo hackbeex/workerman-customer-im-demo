@@ -21,148 +21,176 @@
 
 /**
  * 聊天主逻辑
- * 主要是处理 onMessage onClose 
+ * 主要是处理 onMessage onClose
  */
-use \GatewayWorker\Lib\Gateway;
+
+use GatewayWorker\Lib\Gateway;
+use Workerman\MySQL\Connection;
 
 class Events
 {
-   /**
-    * 有消息时
-    * @param int $client_id
-    * @param mixed $message
-    */
-   public static function onMessage($client_id, $message)
-   {
+    /** @var Connection */
+    public static $db = null;
+
+    /**
+     * 进程启动后初始化数据库连接
+     */
+    public static function onWorkerStart($worker)
+    {
+        if (getenv("CHAT_LOG_TYPE")) {
+            self::$db = new Connection('host', 'port', 'user', 'password', 'db_name');
+        }
+    }
+
+    /**
+     * 有消息时
+     * @param int $client_id
+     * @param mixed $message
+     */
+    public static function onMessage($client_id, $message)
+    {
         // debug
-        echo "client:{$_SERVER['REMOTE_ADDR']}:{$_SERVER['REMOTE_PORT']} gateway:{$_SERVER['GATEWAY_ADDR']}:{$_SERVER['GATEWAY_PORT']}  client_id:$client_id session:".json_encode($_SESSION)." onMessage:".$message."\n";
+        echo "client:{$_SERVER['REMOTE_ADDR']}:{$_SERVER['REMOTE_PORT']} gateway:{$_SERVER['GATEWAY_ADDR']}:{$_SERVER['GATEWAY_PORT']}  client_id:$client_id session:" . json_encode($_SESSION) . " onMessage:" . $message . "\n";
 
         // 客户端传递的是json数据
         if (!$msg = json_decode($message, true)) {
-            return ;
+            return;
         }
-        
+
+        $service_list_key = 'service_list';
+        $client_list_key = 'client_list';
+
         // 根据类型执行不同的业务
         switch ($msg['type']) {
-            // 客户端回应服务端的心跳
             case 'pong':
                 return;
-            // 客户端登录
-            case 'login':
-                $service_name = htmlspecialchars($msg['client_name']);
-                $_SESSION['client_name'] = $service_name;
 
-                if (!empty($msg['is_service'])) { //客服登录
-                    // 获取房间内所有用户列表
-                    $service_id = $client_id;
+            case 'service_login':
+                $client_name = htmlspecialchars($msg['client_name']);
+                $_SESSION['client_name'] = $client_name;
 
-                    // 转播给当前房间的所有客户端，xx进入聊天室 message {type:login, client_id:xx, name:xx}
-                    $new_message = array('type' => $msg['type'], 'service_id' => $service_id, 'service_name'=>htmlspecialchars($service_name), 'time'=>date('Y-m-d H:i:s'));
-                    Gateway::sendToGroup($service_id, json_encode($new_message));
+                Gateway::joinGroup($client_id, $service_list_key);
 
-                    $clients_list = Gateway::getClientSessionsByGroup($service_id);
-                    foreach($clients_list as $tmp_client_id => $item) {
-                        $clients_list[$tmp_client_id] = $item['client_name'];
-                    }
-                    // 给当前用户发送用户列表
-                    $new_message['client_list'] = $clients_list;
-                    Gateway::sendToCurrentClient(json_encode($new_message));
+                $new_msg = [
+                    'type' => 'service_login',
+                    'client_id' => $client_id,
+                    'client_name' => $client_name,
+                    'time' => date('Y-m-d H:i:s'),
+                ];
+                Gateway::sendToGroup($client_list_key, json_encode($new_msg));
 
-                } else { //用户登录
-                    Gateway::joinGroup($client_id, $msg['service_id']);
-
+                $client_list = Gateway::getClientSessionsByGroup($client_list_key);
+                foreach ($client_list as $tmp_client_id => $item) {
+                    $client_list[$tmp_client_id] = $item['client_name'];
                 }
 
+                $new_msg['client_list'] = $client_list;
+                Gateway::sendToCurrentClient(json_encode($new_msg));
                 return;
-                
-            // 客户端发言 message: {type:say, to_client_id:xx, content:xx}
+
+            case 'client_login':
+                $client_name = htmlspecialchars($msg['client_name']);
+                $_SESSION['client_name'] = $client_name;
+
+                Gateway::joinGroup($client_id, $client_list_key);
+
+                $service_list = Gateway::getClientSessionsByGroup($service_list_key);
+                foreach ($service_list as $tmp_id => $item) {
+                    $service_list[$tmp_id] = $item['client_name'];
+                }
+
+                if (!count($service_list)) {
+                    $new_msg = [
+                        'type' => 'error',
+                        'time' => date('Y-m-d H:i:s'),
+                        'msg' => '现在还没有客服在线'
+                    ];
+                    Gateway::sendToCurrentClient(json_encode($new_msg));
+                    return;
+                }
+
+                // 目前默认第一个客服为其服务
+                $service = reset($service_list);
+                $client_id = key($service_list);
+
+                $new_msg = [
+                    'type' => 'client_login',
+                    'client_id' => $client_id,
+                    'client_name' => $service['client_name'],
+                    'time' => date('Y-m-d H:i:s'),
+                ];
+                Gateway::sendToCurrentClient(json_encode($new_msg));
+                return;
+
             case 'say':
-                // 非法请求
-                if(!isset($_SESSION['room_id'])) {
-                    throw new \Exception("\$_SESSION['room_id'] not set. client_ip:{$_SERVER['REMOTE_ADDR']}");
-                }
-                $room_id = $_SESSION['room_id'];
                 $client_name = $_SESSION['client_name'];
-                
-                // 私聊
-                if($msg['to_client_id'] != 'all') {
-                    $new_message = array(
-                        'type'=>'say',
-                        'from_client_id'=>$client_id, 
-                        'from_client_name' =>$client_name,
-                        'to_client_id'=>$msg['to_client_id'],
-                        'content'=>"<b>对你说: </b>".nl2br(htmlspecialchars($msg['content'])),
-                        'time'=>date('Y-m-d H:i:s'),
-                    );
-                    Gateway::sendToClient($msg['to_client_id'], json_encode($new_message));
-                    $new_message['content'] = "<b>你对".htmlspecialchars($msg['to_client_name'])."说: </b>".nl2br(htmlspecialchars($msg['content']));
-                    Gateway::sendToCurrentClient(json_encode($new_message));
-                }
+                $content = nl2br(htmlspecialchars($msg['content']));
 
-                $chat_log_type = getenv("CHAT_LOG_TYPE");
-                if($chat_log_type == "file") {
-	                //记录聊天日志文件
-	                $log = ['ip'=>$_SERVER['REMOTE_ADDR'],
-	                        'name'=>$client_name,
-	                        'content'=>$msg['content'],
-	                        'time'=>date('Y-m-d H:i:s')
-	                ];
+                $new_msg = [
+                    'type' => 'say',
+                    'from_client_id' => $client_id,
+                    'from_client_name' => $client_name,
+                    'to_client_id' => $msg['to_client_id'],
+                    'content' => $content,
+                    'time' => date('Y-m-d H:i:s'),
+                ];
+                Gateway::sendToClient($msg['to_client_id'], json_encode($new_msg));
 
-	                $log_dir = getenv("CHAT_LOG_DIR");
-	                if(!file_exists($log_dir))
-	                {
-		                if(mkdir($log_dir,777))
-			                echo "成功创建聊天记录保存目录{$log_dir}\n";
-		                else
-			                echo "聊天记录保存目录{$log_dir} 创建失败，请手动创建\n";
-	                }
+                //$new_msg['content'] = nl2br(htmlspecialchars($msg['content']));
+                //Gateway::sendToCurrentClient(json_encode($new_msg));
 
-	                $log_file = $log_dir . "chat" . date('Y-m-d') . ".log";
-	                file_put_contents($log_file,json_encode($log,JSON_UNESCAPED_UNICODE) . "\n",FILE_APPEND);
-
-                } elseif($chat_log_type == "mysql") {
-
-	                global $db;
-	                // 插入
-	                $insert_id = $db->insert('chat_logs')->cols([
-		                'ip'      => $_SERVER[ 'REMOTE_ADDR' ],
-		                'name'    => $client_name,
-		                'content' => $msg[ 'content' ],
-		                'time'    => date('Y-m-d H:i:s')
-	                ])->query();
-                }
-
-
-
-
-                $new_message = array(
-                    'type'=>'say', 
-                    'from_client_id'=>$client_id,
-                    'from_client_name' =>$client_name,
-                    'to_client_id'=>'all',
-                    'content'=>nl2br(htmlspecialchars($msg['content'])),
-                    'time'=>date('Y-m-d H:i:s'),
-                );
-                Gateway::sendToGroup($room_id ,json_encode($new_message));
+                //self::logChat($client_name, $msg['content']);
+                return;
         }
-   }
-   
-   /**
-    * 当客户端断开连接时
-    * @param integer $client_id 客户端id
-    */
-   public static function onClose($client_id)
-   {
-       // debug
-       echo "client:{$_SERVER['REMOTE_ADDR']}:{$_SERVER['REMOTE_PORT']} gateway:{$_SERVER['GATEWAY_ADDR']}:{$_SERVER['GATEWAY_PORT']}  client_id:$client_id onClose:''\n";
-       
-       // 从房间的客户端列表中删除
-       if(isset($_SESSION['room_id']))
-       {
-           $room_id = $_SESSION['room_id'];
-           $new_message = array('type'=>'logout', 'from_client_id'=>$client_id, 'from_client_name'=>$_SESSION['client_name'], 'time'=>date('Y-m-d H:i:s'));
-           Gateway::sendToGroup($room_id, json_encode($new_message));
-       }
-   }
-  
+    }
+
+    /**
+     * 当客户端断开连接时
+     * @param integer $client_id 客户端id
+     */
+    public static function onClose($client_id)
+    {
+        // debug
+        echo "client:{$_SERVER['REMOTE_ADDR']}:{$_SERVER['REMOTE_PORT']} gateway:{$_SERVER['GATEWAY_ADDR']}:{$_SERVER['GATEWAY_PORT']}  client_id:$client_id onClose:''\n";
+
+        // 从房间的客户端列表中删除
+        if (isset($_SESSION['room_id'])) {
+            $room_id = $_SESSION['room_id'];
+            $new_message = array('type' => 'logout', 'from_client_id' => $client_id, 'from_client_name' => $_SESSION['client_name'], 'time' => date('Y-m-d H:i:s'));
+            Gateway::sendToGroup($room_id, json_encode($new_message));
+        }
+    }
+
+    /**
+     * 记录聊天内容
+     * @param $client_name
+     * @param $content
+     */
+    private static function logChat($client_name, $content)
+    {
+        $log = [
+            'ip' => $_SERVER['REMOTE_ADDR'],
+            'name' => $client_name,
+            'content' => $content,
+            'time' => date('Y-m-d H:i:s')
+        ];
+        $chat_log_type = getenv("CHAT_LOG_TYPE");
+
+        if ($chat_log_type == "file") {
+            $log_dir = getenv("CHAT_LOG_DIR");
+            if (!file_exists($log_dir)) {
+                if (mkdir($log_dir, 777, true)) {
+                    echo "成功创建聊天记录保存目录{$log_dir}\n";
+                } else {
+                    echo "聊天记录保存目录{$log_dir} 创建失败，请手动创建\n";
+                }
+            }
+
+            $log_file = $log_dir . "chat" . date('Y-m-d') . ".log";
+            file_put_contents($log_file, json_encode($log, JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND);
+
+        } elseif ($chat_log_type == "mysql") {
+            self::$db->insert('chat_logs')->cols($log)->query();
+        }
+    }
 }
