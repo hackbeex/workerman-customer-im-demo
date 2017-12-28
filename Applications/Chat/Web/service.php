@@ -19,17 +19,15 @@
         </div>
         <div class="col-md-3 column">
             <div class="thumbnail">
-                <div class="caption" id="userlist"></div>
+                <h4>在线咨询用户</h4>
+                <div class="caption"><ul id="userlist"></ul></div>
             </div>
         </div>
         <div class="col-md-6 column">
-            <div class="thumbnail">
-                <div class="caption" id="dialog"></div>
+            <div class="thumbnail" id="dialogs">
+                <div class="caption user-dialog" id="dialog"></div>
             </div>
             <form onsubmit="onSubmit(); return false;">
-                <select style="margin-bottom:8px" id="client_list">
-                    <option value="none">请选择用户</option>
-                </select>
                 <textarea class="textarea thumbnail" id="textarea"></textarea>
                 <div class="say-btn">
                     <input type="button" class="btn btn-default face pull-left" value="表情"/>
@@ -46,11 +44,37 @@
     WEB_SOCKET_SWF_LOCATION = "/swf/WebSocketMain.swf";
     // 开启flash的websocket debug
     WEB_SOCKET_DEBUG = true;
-    var ws, name, client_list = {}, select_client_id = 'none';
+    var ws, name, client_list = {}, select_client_id = '',service_id, service_name;
 
     $(function () {
-        $("#client_list").change(function () {
-            select_client_id = $("#client_list option:selected").attr("value");
+        Date.prototype.format = function(fmt) {
+            var o = {
+                "M+" : this.getMonth()+1,                 //月份
+                "d+" : this.getDate(),                    //日
+                "h+" : this.getHours(),                   //小时
+                "m+" : this.getMinutes(),                 //分
+                "s+" : this.getSeconds(),                 //秒
+                "q+" : Math.floor((this.getMonth()+3)/3), //季度
+                "S"  : this.getMilliseconds()             //毫秒
+            };
+            if(/(y+)/.test(fmt)) {
+                fmt=fmt.replace(RegExp.$1, (this.getFullYear()+"").substr(4 - RegExp.$1.length));
+            }
+            for(var k in o) {
+                if(new RegExp("("+ k +")").test(fmt)){
+                    fmt = fmt.replace(RegExp.$1, (RegExp.$1.length==1) ? (o[k]) : (("00"+ o[k]).substr((""+ o[k]).length)));
+                }
+            }
+            return fmt;
+        };
+
+        $(document).on('click', ".user-item", function () {
+            var new_client_id = $(this).attr("id");
+            if (new_client_id !== select_client_id) {
+                select_client_id = new_client_id;
+                $('.user-dialog').hide();
+                $('#dialog'+new_client_id).show();
+            }
         });
         $('.face').click(function (event) {
             $(this).sinaEmotion();
@@ -94,31 +118,28 @@
         console.log(e.data);
         var data = JSON.parse(e.data);
         switch (data['type']) {
-            // 服务端ping客户端
             case 'ping':
                 ws.send('{"type":"pong"}');
                 break;
-            // 登录 更新用户列表
-            case 'login':
-                //say(data['client_id'], data['client_name'], data['client_name'] + ' 加入了聊天室', data['time']);
-                layer.msg(data['client_name'] + ' 刚刚加入咨询');
-                if (data['client_list']) {
-                    client_list = data['client_list'];
-                } else {
-                    client_list[data['client_id']] = data['client_name'];
-                }
-                flushClientList();
-                console.log(data['client_name'] + "登录成功");
+            case 'client_login':
+                layer.msg(data.client_name + ' 刚刚加入咨询');
+                service_id = data.client_id;
+                service_name = data.client_name;
+                flushClientList(data.client_list);
+                console.log(data.client_name + "登录成功");
                 break;
-            // 发言
+            case 'service_login':
+                var new_client_list = data.client_list ? data.client_list : [];
+                flushClientList(new_client_list);
+                console.log(data.client_name + "登录成功");
+                break;
             case 'say':
                 say(data['from_client_id'], data['from_client_name'], data['content'], data['time']);
                 break;
-            // 用户退出 更新用户列表
             case 'logout':
                 say(data['from_client_id'], data['from_client_name'], data['from_client_name'] + ' 退出了', data['time']);
-                delete client_list[data['from_client_id']];
-                flushClientList();
+                //delete client_list[data['from_client_id']];
+                //flushClientList();
         }
     }
 
@@ -126,41 +147,48 @@
     function showPrompt() {
         name = prompt('输入你的名字：', '');
         if (!name || name === null) {
-            name = '客服007';
+            name = '客服' + Math.random() * 1000000;
         }
     }
 
     // 提交对话
     function onSubmit() {
+        if (!select_client_id) {
+            layer.msg('没有选中用户');
+            return;
+        }
         var input = document.getElementById("textarea");
+        var content = input.value.replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
         ws.send(JSON.stringify({
             type: 'say',
-            to_client_id: $("#client_list option:selected").attr("value"),
-            to_client_name: $("#client_list option:selected").text(),
-            content: input.value.replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r')
+            to_client_id: select_client_id,
+            to_client_name: client_list[select_client_id],
+            content: content
         }));
+
+        var now = (new Date).format('yyyy-MM-dd hh:mm:ss');
+        say(client_id, client_name, content, now);
         input.value = "";
         input.focus();
     }
 
     // 刷新用户列表框
-    function flushClientList() {
-        var userlist_window = $("#userlist");
-        var client_list_select = $("#client_list");
-        userlist_window.empty();
-        client_list_select.empty();
-        userlist_window.append('<h4>在线咨询用户</h4><ul>');
-        client_list_select.append('<option value="none" id="cli_all">请选择用户</option>');
-        for (var p in client_list) {
-            userlist_window.append('<li id="' + p + '">' + client_list[p] + '</li>');
-            client_list_select.append('<option value="' + p + '">' + client_list[p] + '</option>');
+    function flushClientList(new_list) {
+        if (!new_list) {
+            return;
         }
-        client_list_select.val(select_client_id);
-        userlist_window.append('</ul>');
+        var userlist = $("#userlist");
+        var dialogs = $("#dialogs");
+        for (var p in new_list) {
+            if (!client_list[p]) {
+                client_list[p] = new_list[p];
+                userlist.prepend('<li id="' + p + '" class="user-item">' + new_list[p] + '</li>');
+                dialogs.append('<div class="caption user-dialog" id="dialog'+ p +'" style="display: none"></div>');
+            }
+        }
     }
 
-    // 发言
-    function say(from_client_id, from_client_name, content, time) {
+    function formatContent(content) {
         //解析新浪微博图片
         content = content.replace(/(http|https):\/\/[\w]+.sinaimg.cn[\S]+(jpg|png|gif)/gi, function (img) {
                 return "<a target='_blank' href='" + img + "'>" + "<img src='" + img + "'>" + "</a>";
@@ -177,11 +205,19 @@
             }
         );
 
+        return content;
+    }
+
+    // 发言
+    function say(from_client_id, from_client_name, content, time) {
+        content = formatContent(content);
+
         var info = '<div class="speech_item">' +
             '<img src="http://lorempixel.com/38/38/?' + from_client_id + '" class="user_icon" /> ' + from_client_name + ' <br> ' + time + '<div style="clear:both;"></div>' +
             '<p class="triangle-isosceles top">' + content + '</p> ' +
             '</div>';
-        $("#dialog").append(info).parseEmotion();
+        var say_client_id = (from_client_id === service_id) ? select_client_id : from_client_id;
+        $("#dialog" + say_client_id).append(info).parseEmotion();
     }
 </script>
 </body>

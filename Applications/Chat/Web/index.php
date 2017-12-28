@@ -83,12 +83,22 @@
         // 当有消息时根据消息类型显示不同信息
         ws.onmessage = onMessage;
         ws.onclose = function () {
+            layer.msg('ws连接关闭，定时重连');
             console.log("连接关闭，定时重连");
             connect();
         };
         ws.onerror = function () {
+            layer.msg('ws出现错误');
             console.log("出现错误");
         };
+    }
+
+    // 输入姓名
+    function showPrompt() {
+        name = prompt('输入你的名字：', '');
+        if (!name || name === null) {
+            name = '游客'+Math.random() * 1000000;
+        }
     }
 
     // 连接建立时发送登录信息
@@ -114,10 +124,10 @@
                 ws.send('{"type":"pong"}');
                 break;
             case 'client_login':
-                client_id = data['client_id'];
-                client_name = data['client_name'];
-                service_id = data['service_id'];
-                service_name = data['service_name'];
+                client_id = data.client_id;
+                client_name = data.client_name;
+                service_id = data.service_id;
+                service_name = data.service_name;
                 if (service_id) {
                     layer.msg('客服：'+service_name+' 为你服务');
                 } else {
@@ -126,32 +136,23 @@
                 console.log(client_name + "登录成功");
                 break;
             case 'service_login':
-                service_id = data['client_id'];
-                service_name = data['client_name'];
+                service_id = data.client_id;
+                service_name = data.client_name;
                 layer.msg('客服' + data.client_name + '上线');
                 $('#current_client').text(data.client_name);
-                console.log(data['client_name'] + "：客服上线");
+                console.log(data.client_name + "：客服上线");
                 break;
             // 发言
             case 'say':
-                say(data['from_client_id'], data['from_client_name'], data['content'], data['time']);
+                say(data.from_client_id, data.from_client_name, data.content, data['time']);
                 break;
             // 用户退出 更新用户列表
             case 'logout':
-                say(data['from_client_id'], data['from_client_name'], data['from_client_name'] + ' 退出了', data['time']);
-                delete client_list[data['from_client_id']];
+                say(data.from_client_id, data.from_client_name, data.from_client_name + ' 退出了', data['time']);
                 break;
             case 'error':
                 layer.msg(data.msg);
                 break;
-        }
-    }
-
-    // 输入姓名
-    function showPrompt() {
-        name = prompt('输入你的名字：', '');
-        if (!name || name === null) {
-            name = '游客';
         }
     }
 

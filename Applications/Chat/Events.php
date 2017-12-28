@@ -30,15 +30,28 @@ use Workerman\MySQL\Connection;
 class Events
 {
     /** @var Connection */
-    public static $db = null;
+    private static $db = null;
+
+    private static $log_dir = '';
 
     /**
      * 进程启动后初始化数据库连接
      */
     public static function onWorkerStart($worker)
     {
-        if (getenv("CHAT_LOG_TYPE")) {
+        $log_type = getenv("CHAT_LOG_TYPE");
+        if ($log_type == 'mysql') {
             self::$db = new Connection('host', 'port', 'user', 'password', 'db_name');
+        } elseif ($log_type == 'file') {
+            self::$log_dir = getenv("CHAT_LOG_DIR");
+            $log_dir = self::$log_dir;
+            if (!file_exists($log_dir)) {
+                if (mkdir($log_dir, 777, true)) {
+                    echo "成功创建聊天记录保存目录{$log_dir}\n";
+                } else {
+                    echo "聊天记录保存目录{$log_dir} 创建失败，请手动创建\n";
+                }
+            }
         }
     }
 
@@ -100,12 +113,6 @@ class Events
                 }
 
                 if (!count($service_list)) {
-                    $new_msg = [
-                        'type' => 'error',
-                        'time' => date('Y-m-d H:i:s'),
-                        'msg' => '现在还没有客服在线'
-                    ];
-                    Gateway::sendToCurrentClient(json_encode($new_msg));
                     $service_id = '';
                     $service_name = '';
                 } else {
@@ -124,6 +131,20 @@ class Events
                     'time' => date('Y-m-d H:i:s'),
                 ];
                 Gateway::sendToCurrentClient(json_encode($new_msg));
+
+                // 发送给客服更新用户列表
+                $client_list = Gateway::getClientSessionsByGroup($client_list_key);
+                foreach ($client_list as $tmp_client_id => $item) {
+                    $client_list[$tmp_client_id] = $item['client_name'];
+                }
+                $new_msg = [
+                    'type' => 'client_login',
+                    'client_id' => $service_id,
+                    'client_name' => $service_name,
+                    'time' => date('Y-m-d H:i:s'),
+                    'client_list' => $client_list,
+                ];
+                Gateway::sendToClient($service_id, json_encode($new_msg));
                 return;
 
             case 'say':
@@ -178,18 +199,9 @@ class Events
         $chat_log_type = getenv("CHAT_LOG_TYPE");
 
         if ($chat_log_type == "file") {
-            $log_dir = getenv("CHAT_LOG_DIR");
-            if (!file_exists($log_dir)) {
-                if (mkdir($log_dir, 777, true)) {
-                    echo "成功创建聊天记录保存目录{$log_dir}\n";
-                } else {
-                    echo "聊天记录保存目录{$log_dir} 创建失败，请手动创建\n";
-                }
-            }
-
-            $log_file = $log_dir . "chat" . date('Y-m-d') . ".log";
+            $log_file = self::$log_dir . "chat" . date('Y-m-d') . ".log";
             file_put_contents($log_file, json_encode($log, JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND);
-
+            
         } elseif ($chat_log_type == "mysql") {
             self::$db->insert('chat_logs')->cols($log)->query();
         }
