@@ -6,9 +6,9 @@
     <link href="/css/jquery-sinaEmotion-2.1.0.min.css" rel="stylesheet">
     <link href="/css/style.css" rel="stylesheet">
 
-    <script type="text/javascript" src="/js/layer.js"></script>
     <script type="text/javascript" src="/js/jquery.min.js"></script>
     <script type="text/javascript" src="/js/jquery-sinaEmotion-2.1.0.min.js"></script>
+    <script type="text/javascript" src="/layer/layer.js"></script>
     <script type="text/javascript" src="/js/swfobject.js"></script>
     <script type="text/javascript" src="/js/web_socket.js"></script>
 </head>
@@ -71,9 +71,7 @@
         $(document).on('click', ".user-item", function () {
             var new_client_id = $(this).attr("id");
             if (new_client_id !== select_client_id) {
-                select_client_id = new_client_id;
-                $('.user-dialog').hide();
-                $('#dialog'+new_client_id).show();
+                selectClient(new_client_id);
             }
         });
         $('.face').click(function (event) {
@@ -126,11 +124,15 @@
                 service_id = data.client_id;
                 service_name = data.client_name;
                 flushClientList(data.client_list);
+                setDefaultClient(data.client_list);
                 console.log(data.client_name + "登录成功");
                 break;
             case 'service_login':
+                service_id = data.client_id;
+                service_name = data.client_name;
                 var new_client_list = data.client_list ? data.client_list : [];
                 flushClientList(new_client_list);
+                setDefaultClient(new_client_list);
                 console.log(data.client_name + "登录成功");
                 break;
             case 'say':
@@ -140,6 +142,24 @@
                 say(data['from_client_id'], data['from_client_name'], data['from_client_name'] + ' 退出了', data['time']);
                 //delete client_list[data['from_client_id']];
                 //flushClientList();
+        }
+    }
+
+    function selectClient(new_client_id) {
+        console.log('用户切换到：'+ client_list[new_client_id] + ' -- ' + new_client_id);
+        select_client_id = new_client_id;
+        $('.user-dialog').hide();
+        $('#dialog'+new_client_id).show();
+        $('.user-item-click').removeClass('user-item-click');
+        $('#'+new_client_id).addClass('user-item-click');
+    }
+
+    function setDefaultClient(list) {
+        if (!select_client_id) {
+            for (var p in list) {
+                selectClient(p);
+                break;
+            }
         }
     }
 
@@ -167,7 +187,7 @@
         }));
 
         var now = (new Date).format('yyyy-MM-dd hh:mm:ss');
-        say(client_id, client_name, content, now);
+        say(service_id, service_name, content, now);
         input.value = "";
         input.focus();
     }

@@ -63,7 +63,7 @@ class Events
     public static function onMessage($client_id, $message)
     {
         // debug
-        echo "client:{$_SERVER['REMOTE_ADDR']}:{$_SERVER['REMOTE_PORT']} gateway:{$_SERVER['GATEWAY_ADDR']}:{$_SERVER['GATEWAY_PORT']}  client_id:$client_id session:" . json_encode($_SESSION) . " onMessage:" . $message . "\n";
+        echo "client:{$_SERVER['REMOTE_ADDR']}:{$_SERVER['REMOTE_PORT']} gateway:{$_SERVER['GATEWAY_ADDR']}:{$_SERVER['GATEWAY_PORT']}  client_id:$client_id session:" . json_encode($_SESSION, JSON_UNESCAPED_UNICODE) . " onMessage:" . $message . "\n";
 
         // 客户端传递的是json数据
         if (!$msg = json_decode($message, true)) {
@@ -113,12 +113,11 @@ class Events
                 }
 
                 if (!count($service_list)) {
-                    $service_id = '';
                     $service_name = '';
+                    $service_id = '';
                 } else {
                     // 目前默认第一个客服为其服务
-                    $service = reset($service_list);
-                    $service_name = $service['client_name'];
+                    $service_name = reset($service_list);
                     $service_id = key($service_list);
                 }
 
@@ -201,7 +200,7 @@ class Events
         if ($chat_log_type == "file") {
             $log_file = self::$log_dir . "chat" . date('Y-m-d') . ".log";
             file_put_contents($log_file, json_encode($log, JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND);
-            
+
         } elseif ($chat_log_type == "mysql") {
             self::$db->insert('chat_logs')->cols($log)->query();
         }

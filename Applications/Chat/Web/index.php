@@ -6,9 +6,9 @@
     <link href="/css/jquery-sinaEmotion-2.1.0.min.css" rel="stylesheet">
     <link href="/css/style.css" rel="stylesheet">
 
-    <script type="text/javascript" src="/js/layer.js"></script>
     <script type="text/javascript" src="/js/jquery.min.js"></script>
     <script type="text/javascript" src="/js/jquery-sinaEmotion-2.1.0.min.js"></script>
+    <script type="text/javascript" src="/layer/layer.js"></script>
     <script type="text/javascript" src="/js/swfobject.js"></script>
     <script type="text/javascript" src="/js/web_socket.js"></script>
 </head>
@@ -25,7 +25,7 @@
         <div class="col-md-6 column">
             <div id="current_client"></div>
             <div class="thumbnail">
-                <div class="caption" id="dialog"></div>
+                <div class="caption user-dialog" id="dialog"></div>
             </div>
             <form onsubmit="onSubmit(); return false;">
                 <textarea class="textarea thumbnail" id="textarea"></textarea>
@@ -130,6 +130,7 @@
                 service_name = data.service_name;
                 if (service_id) {
                     layer.msg('客服：'+service_name+' 为你服务');
+                    $('#current_client').text(service_name);
                 } else {
                     layer.msg('尚无客服在线');
                 }
